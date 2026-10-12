@@ -4,15 +4,157 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, maximum-scale=1.0" />
 
-    <title>Example Student's HCDE 439 Physical Computing Page!</title>
+    <title>Anay Gokarn's HCDE 439 Assignment 1: Blink!</title>
 
     <link href="style.css" rel="stylesheet" type="text/css" />
   </head>
   <body>
-    <h1>Example Student's Assignment 1!</h1>
-    <div class="header">
-      <img src="red-panda.jpg" />
-      <p>Here is all the documentation for assignment 1!</p>
-    </div>
+    <p><a href="index.html">&larr; Back to home</a></p>
+    <h1>Assignment 1: Blink!</h1>
+    <p>
+      A three-LED "traffic light" chase pattern for the holiday light company: red, yellow, and green
+      LEDs light up one at a time, each for one second, in a repeating loop.
+    </p>
+
+    <section>
+      <h2>Schematic</h2>
+      <figure>
+        <img src="a1-images/schematic.png" alt="Hand-drawn schematic of three LEDs with 100 ohm resistors connected to Arduino pins 13, 12, and 11" />
+        <figcaption>Schematic Image</figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Resistor Calculation</h2>
+      <p>
+        Each LED and its resistor form their own branch, and the three branches are wired in
+        <strong>parallel</strong> between their Arduino pin and a shared ground. Because they are in
+        parallel, each branch sees the full 5&nbsp;V from its pin and can be calculated on its own.
+      </p>
+      <ul>
+        <li>Supply voltage (Arduino digital pin HIGH): V<sub>s</sub> = 5&nbsp;V</li>
+        <li>LED forward voltage (typical for a 5&nbsp;mm red/yellow/green LED): V<sub>f</sub> &asymp; 2&nbsp;V</li>
+        <li>Target LED current: I = 20&nbsp;mA = 0.020&nbsp;A</li>
+      </ul>
+      <p><strong>Kirchhoff's Voltage Law</strong> around one branch (pin &rarr; resistor &rarr; LED &rarr; ground):</p>
+      <pre class="math">V<sub>s</sub> = V<sub>R</sub> + V<sub>f</sub>
+V<sub>R</sub> = V<sub>s</sub> &minus; V<sub>f</sub> = 5 V &minus; 2 V = 3 V</pre>
+      <p><strong>Ohm's Law</strong> for the resistor, which carries the same current as the LED in series with it:</p>
+      <pre class="math">R = V<sub>R</sub> / I = 3 V / 0.020 A = 150 &Omega;</pre>
+      <p>
+        So 150&nbsp;&Omega; is the resistance that keeps each LED at 20&nbsp;mA. I used
+        <strong>100&nbsp;&Omega;</strong> resistors, which gives
+        I = 3&nbsp;V / 100&nbsp;&Omega; = 30&nbsp;mA per LED. That is above the LEDs' typical
+        20&nbsp;mA rating but below the Arduino pin's 40&nbsp;mA absolute maximum, and since only one LED
+        is on at a time in this pattern, the board only ever supplies about 30&nbsp;mA in total.
+      </p>
+    </section>
+
+    <section>
+      <h2>Circuit</h2>
+      <figure>
+        <img src="a1-images/circuit-1.jpeg" alt="Breadboard with red, yellow, and green LEDs, each with a resistor, wired to an Elegoo Uno R3" />
+        <figcaption>Circuit Image #1</figcaption>
+      </figure>
+      <figure>
+        <img src="a1-images/circuit-2.jpeg" alt="Close-up of jumper wires plugged into the Arduino's GND, 13, 12, and 11 header pins" />
+        <figcaption>Circuit Image #2</figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Firmware</h2>
+<pre class="code"><code>// Store the pin number for the red LED (digital pin 13)
+const int LED_1 = 13;
+// Store the pin number for the yellow LED (digital pin 12)
+const int LED_2 = 12;
+// Store the pin number for the green LED (digital pin 11)
+const int LED_3 = 11;
+
+// setup() runs once when the Arduino powers on or resets
+void setup()  {
+    // Configure the red LED's pin as an output so it can supply voltage
+    pinMode (LED_1, OUTPUT);
+    // Configure the yellow LED's pin as an output
+    pinMode (LED_2, OUTPUT);
+    // Configure the green LED's pin as an output
+    pinMode (LED_3, OUTPUT);
+}
+
+// loop() runs over and over forever after setup() finishes
+void  loop() {
+    // Turn the red LED on (pin set to 5V)
+    digitalWrite (LED_1, HIGH);
+    // Turn the yellow LED off (pin set to 0V)
+    digitalWrite (LED_2, LOW);
+    // Turn the green LED off
+    digitalWrite (LED_3, LOW);
+    // Hold this state for 1000 milliseconds (1 second)
+    delay (1000);
+    // Turn the red LED off
+    digitalWrite (LED_1, LOW);
+    // Turn the yellow LED on
+    digitalWrite (LED_2, HIGH);
+    // Keep the green LED off
+    digitalWrite (LED_3, LOW);
+    // Hold this state for 1 second
+    delay (1000);
+    // Keep the red LED off
+    digitalWrite (LED_1, LOW);
+    // Turn the yellow LED off
+    digitalWrite (LED_2, LOW);
+    // Turn the green LED on
+    digitalWrite (LED_3, HIGH);
+    // Hold this state for 1 second, then loop() starts over with red
+    delay (1000);
+}</code></pre>
+    </section>
+
+    <section>
+      <h2>Circuit Operation</h2>
+      <figure>
+        <img class="gif" src="a1-images/circuit-operation.gif" alt="Animated GIF of the red, yellow, and green LEDs lighting one after another" />
+        <figcaption>Circuit Operation GIF</figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Questions</h2>
+
+      <h3>1. Voltage across the LEDs over time</h3>
+      <p>
+        Each LED has about 2&nbsp;V (its forward voltage) across it while its pin is HIGH and 0&nbsp;V while
+        its pin is LOW. The pattern repeats every 3 seconds.
+      </p>
+      <figure>
+        <img src="a1-images/voltage-graph.jpg" alt="Step graph of voltage across the red, yellow, and green LEDs over six seconds; each LED is at 2 V for one second in turn and 0 V otherwise" />
+        <figcaption>Voltage across each LED over two cycles of the pattern. Only one LED is on at any moment.</figcaption>
+      </figure>
+
+      <h3>2. How many LEDs could you blink independently, and how much current would that draw?</h3>
+      <p>
+        The Arduino Uno has 20 digital I/O pins (D0&ndash;D13 &amp; A0&ndash;A5). However, pins D0 &amp; D1
+        are for USB meaning that I would be able to blink <strong>18 LEDs</strong> independently
+        simultaneously with one on each pin. To calculate current draw I would do
+        18 &times; 20&nbsp;mA = <strong>360&nbsp;mA</strong>. This is more than the Arduino's 200&nbsp;mA limit
+        so to light them all at once I would require larger resistors or to activate them in a pattern where
+        only a few LEDs are on at once.
+      </p>
+
+      <h3>3. How fast do you need to blink the LEDs until you can no longer tell they are blinking?</h3>
+      <p>
+        I tested my vision by changing the <code>delay()</code> values for a circuit with a single LED. When
+        the delay was 20&nbsp;ms (25 blinks per second) I could still see the light flicker. However, when I
+        changed the <code>delay()</code> to 10&nbsp;ms (~50 blinks per second) the LED looked like it was
+        constantly on just dimmer. So an LED needs to blink at least <strong>50 times a second</strong> before
+        I can no longer tell they are blinking.
+      </p>
+
+      <h3>4. Did you use AI tools?</h3>
+      <p>
+        Yes. I used AI tools to help me format &amp; build the documentation page and compress the GIF so
+        that it was small enough for GitHub.
+      </p>
+    </section>
   </body>
 </html>
