@@ -19,7 +19,7 @@
     <section>
       <h2>Schematic</h2>
       <figure>
-        <img src="a1-images/schematic.png" alt="Hand-drawn schematic of three LEDs with 100 ohm resistors connected to Arduino pins 13, 12, and 11" />
+        <img src="a1-images/schematic.png" alt="Hand-drawn schematic of three LEDs with 220 ohm resistors connected to Arduino pins 13, 12, and 11" />
         <figcaption>Schematic Image</figcaption>
       </figure>
     </section>
@@ -28,8 +28,8 @@
       <h2>Resistor Calculation</h2>
       <p>
         Each LED and its resistor form their own branch, and the three branches are wired in
-        <strong>parallel</strong> between their Arduino pin and a shared ground. Because they are in
-        parallel, each branch sees the full 5&nbsp;V from its pin and can be calculated on its own.
+        parallel between their Arduino pin and a shared ground. Because they are in
+        parallel, each branch gets the full 5&nbsp;V from its pin.
       </p>
       <ul>
         <li>Supply voltage (Arduino digital pin HIGH): V<sub>s</sub> = 5&nbsp;V</li>
@@ -42,11 +42,15 @@ V<sub>R</sub> = V<sub>s</sub> &minus; V<sub>f</sub> = 5 V &minus; 2 V = 3 V</pre
       <p><strong>Ohm's Law</strong> for the resistor, which carries the same current as the LED in series with it:</p>
       <pre class="math">R = V<sub>R</sub> / I = 3 V / 0.020 A = 150 &Omega;</pre>
       <p>
-        So 150&nbsp;&Omega; is the resistance that keeps each LED at 20&nbsp;mA. I used
-        <strong>100&nbsp;&Omega;</strong> resistors, which gives
-        I = 3&nbsp;V / 100&nbsp;&Omega; = 30&nbsp;mA per LED. That is above the LEDs' typical
-        20&nbsp;mA rating but below the Arduino pin's 40&nbsp;mA absolute maximum, and since only one LED
-        is on at a time in this pattern, the board only ever supplies about 30&nbsp;mA in total.
+        So 150&nbsp;&Omega; is the <em>minimum</em> resistance that keeps each LED at or below 20&nbsp;mA.
+        My kit (ELEGOO UNO R3 Most Complete Starter Kit) doesn't include a 150&nbsp;&Omega; resistor, so I
+        rounded up to the next available value, <strong>220&nbsp;&Omega;</strong>. Rounding up keeps the
+        current safely under the LEDs' rating:
+      </p>
+      <pre class="math">I = V<sub>R</sub> / R = 3 V / 220 &Omega; &asymp; 0.014 A = 14 mA</pre>
+      <p>
+        At about 14&nbsp;mA per LED, the LEDs are still clearly bright, and the current is well under both
+        the LEDs' 20&nbsp;mA rating and the Arduino pin's 40&nbsp;mA absolute maximum.
       </p>
     </section>
 
@@ -64,46 +68,34 @@ V<sub>R</sub> = V<sub>s</sub> &minus; V<sub>f</sub> = 5 V &minus; 2 V = 3 V</pre
 
     <section>
       <h2>Firmware</h2>
-<pre class="code"><code>// Store the pin number for the red LED (digital pin 13)
+<pre class="code"><code>// Store the pin number for the LEDs
 const int LED_1 = 13;
-// Store the pin number for the yellow LED (digital pin 12)
 const int LED_2 = 12;
-// Store the pin number for the green LED (digital pin 11)
 const int LED_3 = 11;
 
-// setup() runs once when the Arduino powers on or resets
 void setup()  {
-    // Configure the red LED's pin as an output so it can supply voltage
+    // Configure the LED pins as an output so it can supply voltage
     pinMode (LED_1, OUTPUT);
-    // Configure the yellow LED's pin as an output
     pinMode (LED_2, OUTPUT);
-    // Configure the green LED's pin as an output
     pinMode (LED_3, OUTPUT);
 }
 
-// loop() runs over and over forever after setup() finishes
 void  loop() {
-    // Turn the red LED on (pin set to 5V)
+    // Turn the red LED on (pin set to 5V) and the other LEDs off (pin set to 0V)
     digitalWrite (LED_1, HIGH);
-    // Turn the yellow LED off (pin set to 0V)
     digitalWrite (LED_2, LOW);
-    // Turn the green LED off
     digitalWrite (LED_3, LOW);
     // Hold this state for 1000 milliseconds (1 second)
     delay (1000);
-    // Turn the red LED off
+    // Turn the yellow LED on (pin set to 5V) and the other LEDs off (pin set to 0V)
     digitalWrite (LED_1, LOW);
-    // Turn the yellow LED on
     digitalWrite (LED_2, HIGH);
-    // Keep the green LED off
     digitalWrite (LED_3, LOW);
     // Hold this state for 1 second
     delay (1000);
-    // Keep the red LED off
+// Turn the green LED on (pin set to 5V) and the other LEDs off (pin set to 0V)
     digitalWrite (LED_1, LOW);
-    // Turn the yellow LED off
     digitalWrite (LED_2, LOW);
-    // Turn the green LED on
     digitalWrite (LED_3, HIGH);
     // Hold this state for 1 second, then loop() starts over with red
     delay (1000);
