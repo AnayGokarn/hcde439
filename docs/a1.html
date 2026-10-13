@@ -27,30 +27,28 @@
     <section>
       <h2>Resistor Calculation</h2>
       <p>
-        Each LED and its resistor form their own branch, and the three branches are wired in
-        parallel between their Arduino pin and a shared ground. Because they are in
-        parallel, each branch gets the full 5&nbsp;V from its pin.
+        Each branch of the circuit has an LED and a resistor and they are wired in parallel between their
+        Arduino pin and a shared ground. Since they are in parallel, each branch receives 5&nbsp;V from its pin.
       </p>
       <ul>
-        <li>Supply voltage (Arduino digital pin HIGH): V<sub>s</sub> = 5&nbsp;V</li>
-        <li>LED forward voltage (typical for a 5&nbsp;mm red/yellow/green LED): V<sub>f</sub> &asymp; 2&nbsp;V</li>
-        <li>Target LED current: I = 20&nbsp;mA = 0.020&nbsp;A</li>
+        <li>Supply voltage: V<sub>s</sub> = 5&nbsp;V</li>
+        <li>LED voltage: V<sub>l</sub> &asymp; 2&nbsp;V</li>
+        <li>LED current: I = 20&nbsp;mA = 0.02&nbsp;A</li>
       </ul>
-      <p><strong>Kirchhoff's Voltage Law</strong> around one branch (pin &rarr; resistor &rarr; LED &rarr; ground):</p>
-      <pre class="math">V<sub>s</sub> = V<sub>R</sub> + V<sub>f</sub>
-V<sub>R</sub> = V<sub>s</sub> &minus; V<sub>f</sub> = 5 V &minus; 2 V = 3 V</pre>
-      <p><strong>Ohm's Law</strong> for the resistor, which carries the same current as the LED in series with it:</p>
+      <p>Kirchhoff's Voltage Law for one branch (pin &rarr; resistor &rarr; LED &rarr; ground):</p>
+      <pre class="math">V<sub>s</sub> = V<sub>R</sub> + V<sub>l</sub>
+V<sub>R</sub> = V<sub>s</sub> &minus; V<sub>l</sub> = 5 V &minus; 2 V = 3 V</pre>
+      <p>Ohm's Law for the resistor, which carries the same current as the LED in series with it:</p>
       <pre class="math">R = V<sub>R</sub> / I = 3 V / 0.020 A = 150 &Omega;</pre>
       <p>
-        So 150&nbsp;&Omega; is the <em>minimum</em> resistance that keeps each LED at or below 20&nbsp;mA.
-        My kit (ELEGOO UNO R3 Most Complete Starter Kit) doesn't include a 150&nbsp;&Omega; resistor, so I
-        rounded up to the next available value, <strong>220&nbsp;&Omega;</strong>. Rounding up keeps the
-        current safely under the LEDs' rating:
+        So to keep each LED at 20&nbsp;mA, they need a 150&nbsp;&Omega; resistor. The kit doesn't include a
+        150&nbsp;&Omega; resistor, so I rounded up to the next available value, 220&nbsp;&Omega;. Rounding up
+        keeps the current safely under the LEDs' rating:
       </p>
       <pre class="math">I = V<sub>R</sub> / R = 3 V / 220 &Omega; &asymp; 0.014 A = 14 mA</pre>
       <p>
-        At about 14&nbsp;mA per LED, the LEDs are still clearly bright, and the current is well under both
-        the LEDs' 20&nbsp;mA rating and the Arduino pin's 40&nbsp;mA absolute maximum.
+        At about 14&nbsp;mA per LED, the LEDs are still bright, and the current is under both the LEDs'
+        20&nbsp;mA rating and the Arduino pin's 40&nbsp;mA maximum.
       </p>
     </section>
 
