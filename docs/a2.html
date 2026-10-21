@@ -4,15 +4,196 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, maximum-scale=1.0" />
 
-    <title>Example Student's HCDE 439 Physical Computing Page!</title>
+    <title>Anay Gokarn's HCDE 439 Assignment 2: Light-Up Toy!</title>
 
     <link href="style.css" rel="stylesheet" type="text/css" />
   </head>
   <body>
-    <h1>Example Student's Assignment 2!</h1>
-    <div class="header">
-      <img src="red-panda.jpg" />
-      <p>Here is all the documentation for assignment 2!</p>
-    </div>
+    <p><a href="index.html">&larr; Back to home</a></p>
+    <h1>Assignment 2: Fade!</h1>
+    <p>
+      A prototype light-up toy for the toy company.
+      Each press of the button turns off the LED that is lit and fades in the next one, cycling through the colours.
+    </p>
+
+    <section>
+      <h2>Schematic</h2>
+      <figure>
+        <img src="a2-images/schematic.png" alt="Schematic of three LEDs with 220 ohm resistors on Arduino pins 9, 10, and 11, and a push button between 5V and pin 2 with a 10 kilohm resistor to ground" />
+        <figcaption>
+          Each LED is in series with a 220&nbsp;&Omega; resistor on a PWM pin so it can fade using
+          <code>analogWrite()</code>. The button connects 5&nbsp;V to pin 2, and the 10&nbsp;k&Omega;
+          resistor holds pin 2 at 0&nbsp;V when the button isn't pressed.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Resistor Calculation</h2>
+
+      <h3>LED resistors</h3>
+      <p>
+        Each branch of the circuit has an LED and a resistor wired in parallel between their
+        Arduino pin and a shared ground. Since they are in parallel, each branch receives 5&nbsp;V from its pin.
+      </p>
+      <ul>
+        <li>Supply voltage: V<sub>s</sub> = 5&nbsp;V</li>
+        <li>LED voltage: V<sub>l</sub> &asymp; 2&nbsp;V</li>
+        <li>LED current: I = 20&nbsp;mA = 0.02&nbsp;A</li>
+      </ul>
+      <p>Kirchhoff's Voltage Law for one branch (pin &rarr; resistor &rarr; LED &rarr; ground):</p>
+      <pre class="math">V<sub>s</sub> = V<sub>R</sub> + V<sub>l</sub>
+V<sub>R</sub> = V<sub>s</sub> &minus; V<sub>l</sub> = 5 V &minus; 2 V = 3 V</pre>
+      <p>Ohm's Law for the resistor (same current as the LED in series):</p>
+      <pre class="math">R = V<sub>R</sub> / I = 3 V / 0.020 A = 150 &Omega;</pre>
+      <p>
+        The kit doesn't include a 150&nbsp;&Omega; resistor, so I rounded up to the next available value,
+        220&nbsp;&Omega;, which keeps the current under the LEDs' rating:
+      </p>
+      <pre class="math">I = V<sub>R</sub> / R = 3 V / 220 &Omega; &asymp; 0.014 A = 14 mA</pre>
+
+      <h3>Button resistor</h3>
+      <p>
+        When the button is pressed, it connects 5&nbsp;V to pin 2 and to the 10&nbsp;k&Omega; resistor that goes
+        to ground. Without the resistor, pressing the button would connect 5&nbsp;V straight to ground and short circuit. With it, the current through the button is limited to:
+      </p>
+      <pre class="math">I = V / R = 5 V / 10,000 &Omega; = 0.0005 A = 0.5 mA</pre>
+    </section>
+
+    <section>
+      <h2>Circuit</h2>
+      <figure>
+        <img src="a2-images/circuit-1.jpeg" alt="Breadboard with green, yellow, and red LEDs, each with a 220 ohm resistor, and a push button with a 10 kilohm resistor near the bottom, wired to an Arduino" />
+        <figcaption>
+          Each LED has a 220&nbsp;&Omega;
+          resistor between its Arduino wire and its long leg, and its short leg goes to the ground. At the
+          bottom, the push button connects the 5&nbsp;V rail to the row with the blue wire to pin 2, and the
+          10&nbsp;k&Omega; resistor goes to ground.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="a2-images/circuit-2.jpeg" alt="Close-up of jumper wires plugged into the Arduino's 5V, GND, 2, ~9, ~10, and ~11 header pins" />
+        <figcaption>
+          The Arduino connections. The white and
+          black wires on the power header bring 5&nbsp;V and GND to the breadboard rails.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Firmware</h2>
+<pre class="code"><code>// Store the pin numbers for the LEDs
+const int LED_PINS[] = {9, 10, 11};
+// Store the number of LEDs
+const int NUM_LEDS = 3;
+// Store the button pin number
+const int BUTTON_PIN = 2;
+
+// Keep track of which LED is on (0 = red, 1 = yellow, 2 = green)
+int currentLed = 0;
+// Remember what the button read the last time the loop() ran
+int lastButtonState = LOW;
+
+void setup() {
+    // Cycle through the LED pins
+    for (int i = 0; i &lt; NUM_LEDS; i++) {
+        // Configure the LED pin as an output
+        pinMode(LED_PINS[i], OUTPUT);
+    }
+    // Configure the button pin as an input
+    pinMode(BUTTON_PIN, INPUT);
+    // Start with the red LED on
+    digitalWrite(LED_PINS[currentLed], HIGH);
+}
+
+void loop() {
+    // Read the button (HIGH when pressed, LOW when released)
+    int buttonState = digitalRead(BUTTON_PIN);
+    // If statement starts when button is pressed (only once per press)
+    if (buttonState == HIGH &amp;&amp; lastButtonState == LOW) {
+        // Turn off the LED that is currently on
+        digitalWrite(LED_PINS[currentLed], LOW);
+        // Move to the next LED
+        currentLed = (currentLed + 1) % NUM_LEDS;
+        // Increase the brightness from 0 up to 255
+        for (int brightness = 0; brightness &lt;= 255; brightness++) {
+            // Set the LED's brightness
+            analogWrite(LED_PINS[currentLed], brightness);
+            // Wait 2 ms between steps
+            delay(2);
+        }
+    }
+    // Save this reading so the next loop() can tell if the button was just pressed
+    lastButtonState = buttonState;
+    // Wait 20 ms for debounce
+    delay(20);
+}</code></pre>
+    </section>
+
+    <section>
+      <h2>Circuit Operation</h2>
+      <figure>
+        <img class="gif" src="a2-images/circuit-operation.gif" alt="Animated GIF of the button being pressed and the lit LED changing from red to yellow to green" />
+        <figcaption>
+          Each button press turns off the current LED and fades in the next one, cycling
+          red &rarr; yellow &rarr; green &rarr; red.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Questions</h2>
+
+      <h3>1. Voltage across an LED with analogWrite(led, 64), analogWrite(led, 128), and analogWrite(led, 255)</h3>
+      <p>
+        The value passed into <code>analogWrite()</code> sets what fraction of each cycle the pin is at HIGH, out of 255:
+      </p>
+      <ul>
+        <li><code>analogWrite(led, 64)</code>: 64 / 255 &asymp; 25% on, about 0.51&nbsp;ms of every 2.04&nbsp;ms</li>
+        <li><code>analogWrite(led, 128)</code>: 128 / 255 &asymp; 50% on, about 1.02&nbsp;ms of every 2.04&nbsp;ms</li>
+        <li><code>analogWrite(led, 255)</code>: 255 / 255 = 100% on, so the LED is at 2&nbsp;V the whole time</li>
+      </ul>
+      <figure>
+        <img src="a2-images/voltage-graph.png" alt="Three stacked graphs of voltage across an LED over 6 milliseconds." />
+        <figcaption>
+          Voltage across the LED over three PWM cycles. The peak is always 2&nbsp;V.
+        </figcaption>
+      </figure>
+
+      <h3>2. Total current draw with all LEDs on, and battery life on a 1200&nbsp;mAh battery</h3>
+      <p>
+        Each LED branch has 3&nbsp;V across its 220&nbsp;&Omega; resistor, so each LED draws:
+      </p>
+      <pre class="math">I<sub>LED</sub> = 3 V / 220 &Omega; &asymp; 0.0136 A = 13.6 mA</pre>
+      <p>If all three LEDs are on at the same time:</p>
+      <pre class="math">I<sub>total</sub> = 3 &times; 13.6 mA &asymp; 40.9 mA</pre>
+      <p>
+        This is below the Arduino's limits since each pin only supplies 13.6&nbsp;mA, which is under the
+        20&nbsp;mA maximum per LED and 40&nbsp;mA maximum per pin. The 40.9&nbsp;mA total is under the
+        200&nbsp;mA limit for the whole Arduino. Pressing the button adds only 0.5&nbsp;mA through the
+        10&nbsp;k&Omega; resistor, which doesn't change anything.
+      </p>
+      <p>Battery life on a 1200&nbsp;mAh battery with all three LEDs on:</p>
+      <pre class="math">t = 1200 mAh / 40.9 mA &asymp; 29 hours</pre>
+      <p>
+        That only counts the LEDs. The Arduino board itself also uses current to run, so the real circuit would draw more and not last as long. Additionally, my toy only lights up one LED at a time, so in normal use it would likely last a bit longer.
+      </p>
+
+      <h3>3. Measured voltage across an LED vs. its theoretical forward voltage</h3>
+      <p>
+        I measured the voltage across the red LED while it was fully on, with my multimeter set to DC volts. It read 1.94&nbsp;V.
+      </p>
+      <p>
+        The theoretical forward voltage I used in my calculations was 2&nbsp;V, and red LEDs are usually rated
+        around 1.8&ndash;2.2&nbsp;V. My measurement is only 0.06&nbsp;Vlower than 2&nbsp;V, so it's well
+        within the expected range. With 1.94&nbsp;V across the LED, the resistor gets slightly more
+        voltage, so the real current is higher than calculated, but still under the 20&nbsp;mA maximum:
+      </p>
+      <pre class="math">I = (5 V &minus; 1.94 V) / 220 &Omega; &asymp; 13.9 mA</pre>
+
+      <h3>4. Did you use AI tools?</h3>
+      <p>Yes. I used AI tools to help me format &amp; build the documentation page and compress the GIF so
+        that it was small enough for GitHub.</p>
+    </section>
   </body>
 </html>
