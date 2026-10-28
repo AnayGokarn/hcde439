@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, maximum-scale=1.0" />
+
+    <title>Anay Gokarn's HCDE 439 Assignment 3: Smart Home Light Sensor!</title>
+
+    <link href="style.css" rel="stylesheet" type="text/css" />
+  </head>
+  <body>
+    <p><a href="index.html">&larr; Back to home</a></p>
+    <h1>Assignment 3: Smart Home Light Sensor!</h1>
+    <p>
+      A prototype for a smart home company that senses the light in a room. A photoresistor is used to measure the light.
+      An RGB LED shows the light level as a colour: blue when it's dark, red when it's bright, and purple in between.
+      A yellow LED represents a room light that turns on when it gets dark.
+    </p>
+
+    <section>
+      <h2>Schematic</h2>
+      <figure>
+        <img src="a3-images/schematic.png" alt="Schematic of circuit" />
+        <figcaption>
+          The photoresistor and the 10&nbsp;k&Omega; resistor make a voltage divider. Pin A0 reads the voltage
+          between them. The red leg has a 330&nbsp;&Omega; resistor and the blue leg has a 220&nbsp;&Omega; resistor. The green leg isn't used. The yellow LED has a 220&nbsp;&Omega; resistor.
+          All the LEDs are on PWM (~) pins so <code>analogWrite()</code> can be used to dim them.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Voltage Divider Calculation</h2>
+      <p>
+        The photoresistor (R<sub>1</sub>) is between 5&nbsp;V and A0. The 10&nbsp;k&Omega; resistor (R<sub>2</sub>)
+        is between A0 and ground. The voltage at A0 is:
+      </p>
+      <pre class="math">V<sub>measure</sub> = 5 V &times; R<sub>2</sub> / (R<sub>1</sub> + R<sub>2</sub>) = 5 V &times; 10 k&Omega; / (R<sub>photo</sub> + 10 k&Omega;)</pre>
+      <p>
+        More light lowers the photoresistor's resistance, which raises the voltage at A0. So more light will output a higher reading.
+      </p>
+
+      <h3>Choosing the fixed resistor</h3>
+      <p>
+        My photoresistor is about 1&nbsp;k&Omega; in bright light and about 100&nbsp;k&Omega; in the dark. The fixed
+        resistor gives the biggest voltage change when it's in the middle of that range, so I picked
+        10&nbsp;k&Omega; (&radic;(1 k&Omega; &times; 100 k&Omega;) = 10 k&Omega;). The readings I expected:
+      </p>
+      <ul>
+        <li>Bright (~1&nbsp;k&Omega;): 5 &times; 10k / (1k + 10k) &asymp; 4.55&nbsp;V &rarr; reading &asymp; 930</li>
+        <li>Room light (~10&nbsp;k&Omega;): 5 &times; 10k / (10k + 10k) = 2.5&nbsp;V &rarr; reading &asymp; 512</li>
+        <li>Dark (~100&nbsp;k&Omega;): 5 &times; 10k / (100k + 10k) &asymp; 0.45&nbsp;V &rarr; reading &asymp; 93</li>
+      </ul>
+
+      <h3>Values I measured</h3>
+      <p>
+        In my room, I used the Serial Monitor to pick 150 as the darkest value and 660 as the brightest value.
+        Anything below 150 just stays fully blue. To find the photoresistor's resistance at each value:
+      </p>
+      <pre class="math">V = reading / 1023 &times; 5 V
+R<sub>photo</sub> = 10 k&Omega; &times; (5 V &minus; V) / V
+
+Darkest:   150 / 1023 &times; 5 = 0.73 V   &rarr;  R<sub>photo</sub> = 10k &times; (5 &minus; 0.73) / 0.73 &asymp; 58 k&Omega;
+Brightest: 660 / 1023 &times; 5 = 3.23 V   &rarr;  R<sub>photo</sub> = 10k &times; (5 &minus; 3.23) / 3.23 &asymp; 5.5 k&Omega;</pre>
+      <p>
+        My room never got as bright as 1&nbsp;k&Omega;, so I used these measured values in my code. That way the LED
+        is fully red at the brightest light I tested in.
+      </p>
+    </section>
+
+    <section>
+      <h2>LED Resistor Calculation</h2>
+      <p>
+        Each LED goes from its pin (5&nbsp;V), through a resistor and the LED, to ground. The resistor gets the
+        voltage the LED doesn't use:
+      </p>
+      <pre class="math">V<sub>R</sub> = 5 V &minus; V<sub>LED</sub>          I = V<sub>R</sub> / R</pre>
+
+      <h3>Why the red LED has a bigger resistor than the blue LED</h3>
+      <p>
+        The red and blue LEDs both use about 2.0&nbsp;V, so each resistor gets 3&nbsp;V. A bigger resistor lets less
+        current through, which makes the LED dimmer:
+      </p>
+      <pre class="math">Red:  (5 V &minus; 2.0 V) / 330 &Omega; &asymp; 9.1 mA
+Blue: (5 V &minus; 2.0 V) / 220 &Omega; &asymp; 13.6 mA</pre>
+      <p>
+        Blue gets more current than red, so it looks brighter. When the two colours mix, the in-between colours
+        <strong>lean blue</strong>. Both are well under the 20&nbsp;mA limit.
+      </p>
+
+      <h3>Yellow LED</h3>
+      <p>A yellow LED also uses about 2.0&nbsp;V. With 220&nbsp;&Omega;:</p>
+      <pre class="math">I = (5 V &minus; 2.0 V) / 220 &Omega; &asymp; 13.6 mA</pre>
+      <p>That's under 20&nbsp;mA and bright enough for a room light.</p>
+    </section>
+
+    <section>
+      <h2>Circuit</h2>
+      <figure>
+        <img src="a3-images/circuit-overview.jpeg" alt="Top-down view of the Arduino Uno wired to a breadboard with a photoresistor, an RGB LED glowing, and a yellow LED" />
+        <figcaption>
+          The whole circuit. From left to right: the photoresistor and 10&nbsp;k&Omega; resistor, the RGB LED with
+          its 330&nbsp;&Omega; and 220&nbsp;&Omega; resistors, and the yellow LED with its 220&nbsp;&Omega; resistor.
+        </figcaption>
+      </figure>
+      <div class="photo-grid">
+        <figure>
+          <img src="a3-images/circuit-arduino.jpeg" alt="Close-up of the Arduino with wires in 5V, GND, A0, pin 3, pin 9, and pin 10" />
+          <figcaption>
+            The Arduino wires: 5&nbsp;V (red) and GND (black) to the breadboard, A0 (white), ~9 (red, red leg),
+            ~10 (dark blue, blue leg), and ~3 (yellow, yellow LED).
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="a3-images/circuit-breadboard.jpeg" alt="Top-down view of the breadboard with the photoresistor near the top, the RGB LED in the middle, and the yellow LED lower down" />
+          <figcaption>
+            The breadboard. The photoresistor connects 5&nbsp;V to the A0 row, and the 10&nbsp;k&Omega; resistor
+            connects that row to ground. The RGB LED's longest leg and the yellow LED's short leg go to ground.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>Firmware</h2>
+<pre class="code"><code>// Pin that reads the voltage divider (V_measure)
+const int SENSOR_PIN = A0;
+// Pin for the RGB LED's red leg
+const int RED_PIN = 9;
+// Pin for the RGB LED's blue leg
+const int BLUE_PIN = 10;
+// Pin for the yellow room light LED
+const int LAMP_PIN = 3;
+
+// Darkest reading from testing (0.73 V), shown as 100% blue
+const int DARK_READING = 150;
+// Brightest reading from testing (3.23 V), shown as 100% red
+const int BRIGHT_READING = 660;
+// Turn the room light on below this reading (1.47 V)
+const int LAMP_ON_BELOW = 300;
+
+// Runs once at startup
+void setup() {
+    // Set the red pin as an output
+    pinMode(RED_PIN, OUTPUT);
+    // Set the blue pin as an output
+    pinMode(BLUE_PIN, OUTPUT);
+    // Set the yellow LED pin as an output
+    pinMode(LAMP_PIN, OUTPUT);
+    // Start the Serial Monitor at 9600 baud
+    Serial.begin(9600);
+}
+
+// Runs over and over
+void loop() {
+    // Read the light level (0 = 0 V, 1023 = 5 V); more light = higher number
+    int lightReading = analogRead(SENSOR_PIN);
+    // Convert the reading to volts
+    float voltage = lightReading * 5.0 / 1023.0;
+    // Keep the reading between the dark and bright values
+    int clampedReading = constrain(lightReading, DARK_READING, BRIGHT_READING);
+    // Turn the light level into a red brightness from 0 to 255
+    int redBrightness = map(clampedReading, DARK_READING, BRIGHT_READING, 0, 255);
+    // Blue is the opposite of red
+    int blueBrightness = 255 - redBrightness;
+    // Set the red brightness
+    analogWrite(RED_PIN, redBrightness);
+    // Set the blue brightness
+    analogWrite(BLUE_PIN, blueBrightness);
+
+    // Keep track of whether the room light is on
+    bool lampOn;
+    // If the room is dark
+    if (lightReading &lt; LAMP_ON_BELOW) {
+        // Turn the room light on
+        analogWrite(LAMP_PIN, 255);
+        // Remember it is on
+        lampOn = true;
+    } else {
+        // Otherwise turn the room light off
+        analogWrite(LAMP_PIN, 0);
+        // Remember it is off
+        lampOn = false;
+    }
+
+    // Print the time label
+    Serial.print("t=");
+    // Print the time since startup
+    Serial.print(millis());
+    // Print the sensor label
+    Serial.print(" ms | sensor: ");
+    // Print the sensor reading
+    Serial.print(lightReading);
+    // Print the voltage label
+    Serial.print(" | V_measure: ");
+    // Print the voltage
+    Serial.print(voltage, 2);
+    // Print the colour label
+    Serial.print(" V | red/blue: ");
+    // Print the red brightness
+    Serial.print(redBrightness);
+    // Print a slash between red and blue
+    Serial.print("/");
+    // Print the blue brightness
+    Serial.print(blueBrightness);
+    // Print the room light label
+    Serial.print(" | room light: ");
+    // Print ON or OFF and start a new line
+    Serial.println(lampOn ? "ON" : "OFF");
+
+    // Wait 100 ms before the next reading
+    delay(100);
+}</code></pre>
+
+      <h3>Why I chose these values</h3>
+      <ul>
+        <li>
+          <code>DARK_READING = 150</code> and <code>BRIGHT_READING = 660</code> are my darkest and brightest readings
+          (0.73&nbsp;V and 3.23&nbsp;V). <code>map()</code> turns that range into 0&ndash;255, so 150 is fully blue
+          and 660 is fully red.
+        </li>
+        <li>
+          <code>constrain()</code> keeps the reading between 150 and 660. Without it, a reading of 700 would map to
+          about 275, which is too high for <code>analogWrite()</code>.
+        </li>
+        <li>
+          Blue is <code>255 &minus; red</code>, so as one fades out the other fades in. That makes purple in between.
+        </li>
+        <li>
+          <code>LAMP_ON_BELOW = 300</code> is about 1.47&nbsp;V. That's when my room started to feel dim.
+        </li>
+        <li>
+          The 100&nbsp;ms delay gives about 10 readings a second. The colour still changes smoothly, and the
+          Serial Monitor is easy to read.
+        </li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Circuit Operation</h2>
+      <figure>
+        <img class="gif" src="a3-images/circuit-operation.gif" alt="Animated GIF of the circuit as the light around it changes, with the yellow LED turning on when it gets dark" />
+        <figcaption>
+          As the room gets darker, the RGB LED fades from red to blue. The yellow room light turns on when the
+          reading drops below 300. The camera makes the RGB LED look blue-white, but it is red in person.
+        </figcaption>
+      </figure>
+      <div class="photo-grid">
+        <figure>
+          <img src="a3-images/state-1-brightest.jpeg" alt="Circuit in the brightest state, yellow LED off" />
+          <figcaption>1. Brightest: the RGB LED is red. The room light is off.</figcaption>
+        </figure>
+        <figure>
+          <img src="a3-images/state-2.jpeg" alt="Circuit in a slightly darker state, yellow LED off" />
+          <figcaption>2. A bit darker: the RGB LED moves toward purple. The room light is off.</figcaption>
+        </figure>
+        <figure>
+          <img src="a3-images/state-3.jpeg" alt="Circuit in a dim state, yellow LED off" />
+          <figcaption>3. Dim: the RGB LED is mostly blue.</figcaption>
+        </figure>
+        <figure>
+          <img src="a3-images/state-4-darkest.jpeg" alt="Circuit in the dark, RGB LED blue and yellow LED on" />
+          <figcaption>4. Darkest: the RGB LED is blue. The room light is on.</figcaption>
+        </figure>
+      </div>
+      <p>The camera hides the red in these photos too. In person, photo 1 is red.</p>
+
+      <h3>Serial Monitor output</h3>
+      <p>
+        Part of the Serial Monitor output as I made the room darker (&hellip; means lines were skipped). Each line
+        shows the time, the reading, the voltage at A0, the red/blue values, and whether the room light is on.
+      </p>
+<pre class="code"><code>t=10631 ms | sensor: 656 | V_measure: 3.21 V | red/blue: 253/2 | room light: OFF
+t=10748 ms | sensor: 657 | V_measure: 3.21 V | red/blue: 253/2 | room light: OFF
+t=10866 ms | sensor: 657 | V_measure: 3.21 V | red/blue: 253/2 | room light: OFF
+...
+t=12989 ms | sensor: 657 | V_measure: 3.21 V | red/blue: 253/2 | room light: OFF
+t=13108 ms | sensor: 546 | V_measure: 2.67 V | red/blue: 198/57 | room light: OFF
+t=13227 ms | sensor: 544 | V_measure: 2.66 V | red/blue: 197/58 | room light: OFF
+t=13345 ms | sensor: 544 | V_measure: 2.66 V | red/blue: 197/58 | room light: OFF
+...
+t=15844 ms | sensor: 543 | V_measure: 2.65 V | red/blue: 196/59 | room light: OFF
+t=15963 ms | sensor: 438 | V_measure: 2.14 V | red/blue: 144/111 | room light: OFF
+t=16082 ms | sensor: 437 | V_measure: 2.14 V | red/blue: 143/112 | room light: OFF
+t=16202 ms | sensor: 435 | V_measure: 2.13 V | red/blue: 142/113 | room light: OFF
+...
+t=18123 ms | sensor: 435 | V_measure: 2.13 V | red/blue: 142/113 | room light: OFF
+t=18243 ms | sensor: 434 | V_measure: 2.12 V | red/blue: 142/113 | room light: OFF
+t=18363 ms | sensor: 161 | V_measure: 0.79 V | red/blue: 5/250 | room light: ON
+t=18480 ms | sensor: 156 | V_measure: 0.76 V | red/blue: 3/252 | room light: ON
+t=18596 ms | sensor: 148 | V_measure: 0.72 V | red/blue: 0/255 | room light: ON
+t=18714 ms | sensor: 143 | V_measure: 0.70 V | red/blue: 0/255 | room light: ON
+...
+t=22104 ms | sensor: 130 | V_measure: 0.64 V | red/blue: 0/255 | room light: ON</code></pre>
+    </section>
+
+    <section>
+      <h2>Questions</h2>
+
+      <h3>1. In your voltage divider, can the variable resistor be either R1 or R2?</h3>
+      <p>Yes, it can be either. The difference is which way the voltage moves.</p>
+      <p>
+        <strong>Photoresistor as R<sub>1</sub> (top, my circuit):</strong> V = 5 &times; 10k / (R<sub>photo</sub> + 10k)
+      </p>
+      <pre class="math">Bright (5.5 k&Omega;): 5 &times; 10 / (5.5 + 10) &asymp; 3.23 V  &rarr; reading &asymp; 660
+Dark   (58 k&Omega;):  5 &times; 10 / (58 + 10)  &asymp; 0.73 V  &rarr; reading &asymp; 150</pre>
+      <p>
+        <strong>Photoresistor as R<sub>2</sub> (bottom):</strong> V = 5 &times; R<sub>photo</sub> / (10k + R<sub>photo</sub>)
+      </p>
+      <pre class="math">Bright (5.5 k&Omega;): 5 &times; 5.5 / (10 + 5.5) &asymp; 1.77 V  &rarr; reading &asymp; 363
+Dark   (58 k&Omega;):  5 &times; 58 / (10 + 58)  &asymp; 4.26 V  &rarr; reading &asymp; 873</pre>
+      <p>
+        On the bottom, the reading goes <em>up</em> when it gets darker. The circuit still works, but the code has to
+        be flipped: <code>map(reading, 873, 363, 0, 255)</code>, and the room light turns on <em>above</em> the
+        threshold. I put it on top so more light gives a higher number, which is easier to follow.
+      </p>
+
+      <h3>2. Voltage at V<sub>measure</sub> over time in the GIF</h3>
+      <figure>
+        <img src="a3-images/voltage-graph.png" alt="Step graph of V_measure over about 11.5 seconds: 3.21 V, then 2.65 V, then 2.12 V, then dropping below the 1.47 V room light threshold to about 0.65 V" />
+        <figcaption>
+          V<sub>measure</sub> from the Serial Monitor as the room went from bright to dark. Below the dashed line
+          (1.47&nbsp;V), the room light turns on.
+        </figcaption>
+      </figure>
+      <p>
+        Each step down is the room getting darker. The voltage stays flat while the light stays the same. The small
+        wiggles are noise of about &plusmn;0.02&nbsp;V.
+      </p>
+
+      <h3>3. How would 10-bit PWM and a 16-bit ADC change the map() code?</h3>
+      <p>
+        <code>map()</code> goes from the <code>analogRead()</code> range to the <code>analogWrite()</code> range,
+        so both numbers would change:
+      </p>
+      <ul>
+        <li>
+          <strong>16-bit ADC:</strong> readings go from 0 to 65,535 instead of 0 to 1023. That's 64&times; bigger, so
+          150 becomes 9,600, 660 becomes 42,240, and the room light threshold becomes 19,200.
+        </li>
+        <li>
+          <strong>10-bit PWM:</strong> <code>analogWrite()</code> goes from 0 to 1023 instead of 0 to 255. Fully on
+          is 1023, and blue is <code>1023 &minus; red</code>.
+        </li>
+      </ul>
+      <pre class="math">// Now (10-bit in, 8-bit out)
+int redBrightness = map(clampedReading, 150, 660, 0, 255);
+
+// 16-bit in, 10-bit out
+long redBrightness = map(clampedReading, 9600, 42240, 0, 1023);</pre>
+      <p>
+        The variables would also need to be <code>long</code> instead of <code>int</code>, because an
+        <code>int</code> on the Uno only goes up to 32,767. The upside is more detail: the reading would be more
+        precise and the colour fade would have 1024 steps instead of 256.
+      </p>
+
+      <h3>4. Did you use AI tools?</h3>
+      <p>Yes. I used AI tools to help me write and comment the code, fromat the documentation
+        page, and compress the GIF so it was small enough for GitHub.</p>
+    </section>
+  </body>
+</html>
