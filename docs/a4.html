@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, maximum-scale=1.0" />
+
+    <title>Anay Gokarn's HCDE 439 Assignment 4: Touch-Speed Servo!</title>
+
+    <link href="style.css" rel="stylesheet" type="text/css" />
+  </head>
+  <body>
+    <p><a href="index.html">&larr; Back to home</a></p>
+    <h1>Assignment 4: Touch-Speed Servo!</h1>
+    <p>
+      A servo motor sweeps in a 180&deg; arc, with a capacitive button which when touched increases the speed.
+    </p>
+
+    <section>
+      <h2>Parts and Libraries</h2>
+      <ul>
+        <li><strong><code>CapacitiveSensor.h</code>:</strong> reads the touch pad.</li>
+        <li><strong><code>Servo.h</code>:</strong> moves the servo to an angle.</li>
+        <li><strong>Input:</strong> a touch sensor made from aluminum foil and a 1&nbsp;M&Omega; resistor.</li>
+        <li><strong>Output:</strong> an SG90 servo motor.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Schematic</h2>
+      <figure>
+        <img src="a4-images/schematic.png" />
+        <figcaption>
+          the circuit has a servo where the signal wire is connected to pin 9 and a capacitive button with the send
+          connected to pin 4 and the receive connected to pin 2.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Component Value Calculations</h2>
+
+      <h3>The 1&nbsp;M&Omega; resistor</h3>
+      <p>
+        The library sets the send pin high and times how long the recive pin takes to go to high too. I used foil as
+        a capacitor. When I touch the foil my body adds more capacitance, so the pin will take longer to charge. The
+        time depends on the resistor and the capacitance:
+      </p>
+      <pre class="math">&tau; = R &times; C
+
+No touch (pad &asymp; 10 pF):     1 M&Omega; &times; 10 pF  = 10 &micro;s
+Touching (hand &asymp; 100 pF):  1 M&Omega; &times; 100 pF = 100 &micro;s</pre>
+      <p>
+        A touch takes about 10 times longer, so the reading is much bigger. I picked a 1&nbsp;M&Omega; resistor
+        because it was suggested by the library for direct touch. A bigger resistor would detect my hand from
+        further away.
+      </p>
+
+      <h3>The servo</h3>
+      <p>
+        The servo doesn't need a resistor since it has its own circuit inside it. I supply it with 5V and use a PWM
+        pin for control, so pin 9 (PWM pin) uses barely any current. The servo will use 100-250 mA which the
+        Arduino can supply over USB.
+      </p>
+    </section>
+
+    <section>
+      <h2>Circuit</h2>
+      <figure>
+        <img src="a4-images/circuit-overview.jpeg" />
+        <figcaption>
+          The whole circuit. From left to right: the Arduino with the servo, the breadboard with the
+          1&nbsp;M&Omega; resistor, and the foil pad on two alligator clips.
+        </figcaption>
+      </figure>
+      <div class="photo-grid">
+        <figure>
+          <img src="a4-images/circuit-arduino.jpeg" />
+          <figcaption>
+            The Arduino wires. Red goes to 5&nbsp;V, black to GND, and blue to ~9. These connect to the servo's red,
+            brown, and orange wires. Green goes to pin 4 (send) and yellow goes to pin 2 (receive).
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="a4-images/circuit-breadboard.jpeg" />
+          <figcaption>
+            The breadboard. The 1&nbsp;M&Omega; resistor connects the green wire (pin 4) to the yellow wire (pin 2).
+            The teal wire in the yellow wire's row goes to the foil pad.
+          </figcaption>
+        </figure>
+      </div>
+      <figure>
+        <img src="a4-images/circuit-breadboard-wide.jpeg" />
+        <figcaption>
+          A wider view of the breadboard. It shows the teal wire and alligator clips going to the foil pad, and the
+          servo cable going to the Arduino. The close-up couldn't fit the pad and the servo, so I took this one too.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Firmware</h2>
+<pre class="code"><code>// Library for reading the capacitive touch sensor
+#include &lt;CapacitiveSensor.h&gt;
+// Library for controlling the servo motor
+#include &lt;Servo.h&gt;
+
+// Send pin: charges the touch pad through the 1 MOhm resistor
+const int SEND_PIN = 4;
+// Receive pin: connected to the foil touch pad
+const int RECEIVE_PIN = 2;
+// Servo signal pin (orange wire)
+const int SERVO_PIN = 9;
+
+// Number of samples the library adds together for each reading (fewer = faster reading)
+const int SAMPLES = 10;
+// Number of readings averaged at startup to find the untouched value
+const int CALIBRATION_READS = 50;
+// Changes smaller than this above the baseline count as noise, not a touch
+const long NOISE_THRESHOLD = 30;
+// How far above the baseline a full-hand touch reads (measured in the Serial Monitor)
+const long TOUCH_RANGE = 1000;
+// Milliseconds per degree with no touch (same as the Sweep example: slow)
+const int SLOWEST_DELAY = 30;
+// Milliseconds per degree with a full touch (fast)
+const int FASTEST_DELAY = 3;
+
+// Set up the capacitive sensor: first parameter is send, second is receive
+CapacitiveSensor touchSensor = CapacitiveSensor(SEND_PIN, RECEIVE_PIN);
+// Create the Servo object to control the servo
+Servo myservo;
+
+// Current servo position in degrees
+int pos = 0;
+// Untouched sensor reading, found during calibration
+long baseline = 0;
+// Smoothed touch strength (0 = no touch)
+long smoothedTouch = 0;
+
+// Runs once at startup
+void setup() {
+  // Start the Serial Monitor at 115200 baud so printing doesn't slow the servo down
+  Serial.begin(115200);
+  // Turn off the library's auto-calibration because this sketch calibrates itself
+  touchSensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
+
+  // Tell the user not to touch the pad
+  Serial.println("Calibrating... don't touch the pad");
+  // Running total of the calibration readings
+  long total = 0;
+  // Take several readings while nobody is touching the pad
+  for (int i = 0; i &lt; CALIBRATION_READS; i++) {
+    // Add one 10-sample reading to the total
+    total += touchSensor.capacitiveSensor(SAMPLES);
+    // Short pause between readings
+    delay(10);
+  }
+  // The average untouched reading becomes the baseline
+  baseline = total / CALIBRATION_READS;
+  // Print the baseline label
+  Serial.print("Baseline: ");
+  // Print the baseline value
+  Serial.println(baseline);
+
+  // Attach the servo on pin 9 after calibrating, so its movement can't affect the baseline
+  myservo.attach(SERVO_PIN);
+}
+
+// Runs over and over
+void loop() {
+  // Go from 0 degrees to 180 degrees in 1 degree steps
+  for (pos = 0; pos &lt;= 180; pos += 1) {
+    // Tell the servo to go to the position in 'pos'
+    myservo.write(pos);
+    // Wait for a time set by the touch sensor (shorter wait = faster sweep)
+    delay(readStepDelay());
+  }
+  // Go from 180 degrees back to 0 degrees in 1 degree steps
+  for (pos = 180; pos &gt;= 0; pos -= 1) {
+    // Tell the servo to go to the position in 'pos'
+    myservo.write(pos);
+    // Wait for a time set by the touch sensor (shorter wait = faster sweep)
+    delay(readStepDelay());
+  }
+}
+
+// Reads the touch sensor and returns how long to wait before the next degree
+int readStepDelay() {
+  // The time the reading starts, in milliseconds
+  long start = millis();
+  // Get the sensor value with 10 samples (bigger number = more contact with the pad)
+  long raw = touchSensor.capacitiveSensor(SAMPLES);
+  // How long the reading took, in milliseconds
+  long readTime = millis() - start;
+
+  // Subtract the baseline so no touch reads about 0
+  long touch = raw - baseline;
+  // If the change is too small to be a real touch
+  if (touch &lt; NOISE_THRESHOLD) {
+    // Treat it as no touch
+    touch = 0;
+  }
+  // Keep the touch value between 0 and a full touch
+  touch = constrain(touch, 0, TOUCH_RANGE);
+  // Smooth out noise: 3 parts old value, 1 part new value
+  smoothedTouch = (smoothedTouch * 3 + touch) / 4;
+
+  // Turn touch strength into ms per degree
+  int stepDelay = map(smoothedTouch, 0, TOUCH_RANGE, SLOWEST_DELAY, FASTEST_DELAY);
+  // Take off the time the reading already used, so each degree takes stepDelay in total
+  int waitTime = stepDelay - readTime;
+  // If the reading took longer than stepDelay
+  if (waitTime &lt; 0) {
+    // Don't wait at all
+    waitTime = 0;
+  }
+
+  // Print the reading time label
+  Serial.print("read ms: ");
+  // Print how long the reading took
+  Serial.print(readTime);
+  // Print the raw value label
+  Serial.print(" | raw: ");
+  // Print the raw sensor value
+  Serial.print(raw);
+  // Print the touch label
+  Serial.print(" | touch: ");
+  // Print the smoothed touch value
+  Serial.print(smoothedTouch);
+  // Print the speed label
+  Serial.print(" | ms/deg: ");
+  // Print the time per degree
+  Serial.print(stepDelay);
+  // Print the position label
+  Serial.print(" | pos: ");
+  // Print the servo position
+  Serial.println(pos);
+
+  // Send back how long loop() should wait
+  return waitTime;
+}</code></pre>
+
+      <h3>Why I chose these values</h3>
+      <ul>
+        <li><code>SEND_PIN = 4</code> and <code>RECEIVE_PIN = 2</code>: the resistor connects them, and the foil is on pin 2.</li>
+        <li><code>SERVO_PIN = 9</code>: the servo's signal wire.</li>
+        <li><code>SAMPLES = 10</code>: with 30, a touch reading took 25ms to register and it slowed down the servo. 10 is faster.</li>
+        <li><code>TOUCH_RANGE = 1000</code>: a light touch read about 550 (medium speed), and a full hand read 1,000+ (top speed).</li>
+        <li><code>SLOWEST_DELAY = 30</code>: the delay from the Sweep example, so one sweep takes about 5&nbsp;s with no touch.</li>
+        <li><code>FASTEST_DELAY = 3</code>: the SG90 needs about 2ms per degree (according to datasheet), so 3&nbsp;ms is as fast as it can safely go.</li>
+      </ul>
+
+      <h3>Calibration, smoothing, and debounce</h3>
+      <ul>
+        <li>
+          <strong>Calibration:</strong> Because there is a lot of variability in my capacitive sensor (a piece of aluminium foil), I added
+          calibration code to my sketch. When the Arduino starts, the code takes 50 readings without a touch to
+          establish a baseline. Every reading after has the baseline subtracted from it. I had to turn off the base
+          calibration included with the library for this to work.
+        </li>
+        <li>
+          <strong>Smoothing:</strong> <code>smoothedTouch = (smoothedTouch * 3 + touch) / 4</code> is a running
+          average.
+        </li>
+        <li>
+          <strong>Debounce:</strong> debouncing is usually for an on/off button that flickers. My sketch doesn't have
+          an on/off state, because touch changes the speed gradually.
+        </li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Circuit Operation</h2>
+      <figure>
+        <img class="gif" src="a4-images/circuit-operation.gif" />
+        <figcaption>
+          The servo sweeps back and forth. With no touch it moves slowly. When I touch the foil it speeds up, and
+          when I let go it slows down again.
+        </figcaption>
+      </figure>
+
+      <h3>Serial Monitor output</h3>
+      <p>
+        Parts of the Serial Monitor output as I went from no touch, to a light touch, to a full hand, and back
+        (ellipses = skipped lines). Each line shows how long the reading took, the raw reading, the smoothed
+        touch value, the delay per degree, and the servo position.
+      </p>
+<pre class="code"><code>Calibrating... don't touch the pad
+Baseline: 22
+read ms: 0 | raw: 0 | touch: 0 | ms/deg: 30 | pos: 0
+read ms: 0 | raw: 21 | touch: 0 | ms/deg: 30 | pos: 1
+read ms: 1 | raw: 22 | touch: 0 | ms/deg: 30 | pos: 2
+read ms: 1 | raw: 23 | touch: 0 | ms/deg: 30 | pos: 3
+...
+read ms: 2 | raw: 565 | touch: 552 | ms/deg: 16 | pos: 94
+read ms: 2 | raw: 560 | touch: 548 | ms/deg: 16 | pos: 93
+read ms: 1 | raw: 554 | touch: 544 | ms/deg: 16 | pos: 92
+read ms: 2 | raw: 586 | touch: 549 | ms/deg: 16 | pos: 91
+read ms: 1 | raw: 600 | touch: 556 | ms/deg: 15 | pos: 90
+...
+read ms: 0 | raw: 43 | touch: 0 | ms/deg: 30 | pos: 62
+read ms: 1 | raw: 182 | touch: 40 | ms/deg: 29 | pos: 61
+read ms: 1 | raw: 363 | touch: 115 | ms/deg: 27 | pos: 60
+read ms: 3 | raw: 525 | touch: 212 | ms/deg: 25 | pos: 59
+read ms: 1 | raw: 634 | touch: 312 | ms/deg: 22 | pos: 58
+read ms: 3 | raw: 1352 | touch: 484 | ms/deg: 17 | pos: 57
+read ms: 4 | raw: 1727 | touch: 613 | ms/deg: 14 | pos: 56
+read ms: 5 | raw: 1920 | touch: 709 | ms/deg: 11 | pos: 55
+read ms: 7 | raw: 3391 | touch: 781 | ms/deg: 9 | pos: 54
+read ms: 3 | raw: 1249 | touch: 835 | ms/deg: 8 | pos: 53
+...
+read ms: 10 | raw: 4654 | touch: 997 | ms/deg: 4 | pos: 6
+read ms: 3 | raw: 1307 | touch: 997 | ms/deg: 4 | pos: 7
+read ms: 10 | raw: 5075 | touch: 997 | ms/deg: 4 | pos: 8
+read ms: 3 | raw: 1175 | touch: 997 | ms/deg: 4 | pos: 9
+...
+read ms: 3 | raw: 919 | touch: 944 | ms/deg: 5 | pos: 97
+read ms: 1 | raw: 389 | touch: 799 | ms/deg: 9 | pos: 96
+read ms: 1 | raw: 126 | touch: 625 | ms/deg: 14 | pos: 95
+read ms: 0 | raw: 59 | touch: 478 | ms/deg: 18 | pos: 94
+read ms: 1 | raw: 43 | touch: 358 | ms/deg: 21 | pos: 93
+read ms: 1 | raw: 34 | touch: 268 | ms/deg: 23 | pos: 92
+...
+read ms: 0 | raw: 32 | touch: 0 | ms/deg: 30 | pos: 75</code></pre>
+    </section>
+
+    <section>
+      <h2>Questions</h2>
+
+      <h3>1. Voltage at pin 9 over time for the servo sweep loop</h3>
+<pre class="code"><code>void loop() {
+  for (pos = 0; pos &lt;= 180; pos += 1) {
+    myservo.write(pos);
+    delay(100);
+  }
+}</code></pre>
+      <figure>
+        <img src="a4-images/voltage-graph.png" />
+      </figure>
+      <p>
+        Pin 9 doesn't output a steady voltage. <code>Servo.h</code> sends a 5&nbsp;V pulse every 20&nbsp;ms, and
+        the pin is at 0&nbsp;V in between.
+      </p>
+      <pre class="math">Pulse every 20 ms  &rarr;  5 pulses per 100 ms delay
+Pulse length starts at 0.54 ms and grows about 10 &micro;s every 100 ms
+181 steps &times; 100 ms &asymp; 18.1 s before the loop starts over</pre>
+      <p>
+        So the graph is a row of 5&nbsp;V pulses, 20&nbsp;ms apart. Every 100&nbsp;ms they get about
+        10&nbsp;&micro;s longer. At 18&nbsp;s they're about 2.4&nbsp;ms long. Then the loop starts over and the
+        pulses go back to 0.54&nbsp;ms.
+      </p>
+
+      <h3>2. The input gives an erroneous reading 1% of the time. How can we address this?</h3>
+<pre class="code"><code>// Take 3 readings in a row and use the middle one (median)
+a = readSensor()
+b = readSensor()
+c = readSensor()
+value = median(a, b, c)   // sort a, b, c and take the middle
+
+// Alternative: throw out readings that jump too far from the last good one
+reading = readSensor()
+if abs(reading - lastGood) &lt; MAX_JUMP:
+    lastGood = reading
+value = lastGood</code></pre>
+      <p>
+        Since bad readings only happen 1% of the time, getting 2 out of 3 wrong is very unlikely (0.03%). And if we
+        sort them, if one is wrong it'll either be the highest or lowest, so the middle value will most likely be
+        accurate.
+      </p>
+
+      <h3>3. The input randomly deviates up or down by 10%. How can we address this?</h3>
+<pre class="code"><code>// Average the last N readings (moving average)
+N = 16
+readings = array of N zeros
+index = 0
+total = 0
+
+loop:
+    total = total - readings[index]   // remove the oldest reading
+    readings[index] = readSensor()    // store the newest reading
+    total = total + readings[index]   // add it to the total
+    index = (index + 1) % N           // move to the next slot
+    value = total / N                 // average of the last N readings</code></pre>
+      <p>
+        Since the question specified that the measurement moves up &amp; down, averaging should cancel out most of
+        the variation. Averaging the readings for N reduces the noise by the square root. So with 16 readings that
+        would be &plusmn;10% becomes &plusmn;2.5%.
+      </p>
+
+      <h3>4. Did you use AI tools?</h3>
+      <p>I used a Claude chatbot for the following:</p>
+      <ul>
+        <li>Asking about issues with my code</li>
+        <li>Verifying why my circuit wasn't working</li>
+        <li>Formatting my code for html output</li>
+      </ul>
+    </section>
+  </body>
+</html>
