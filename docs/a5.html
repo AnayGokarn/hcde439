@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, maximum-scale=1.0" />
+
+    <title>Anay Gokarn's HCDE 439 Assignment 5: Touch-Dimmer LED Strip!</title>
+
+    <link href="style.css" rel="stylesheet" type="text/css" />
+  </head>
+  <body>
+    <p><a href="index.html">&larr; Back to home</a></p>
+    <h1>Assignment 5: Touch-Dimmer LED Strip!</h1>
+    <p>
+      A 12&nbsp;V LED strip whose brightness is set by a capacitive touch pad. The Arduino can't power the strip
+      itself, so an N-MOSFET switches the strip's 12&nbsp;V supply using a PWM signal from
+      <code>analogWrite()</code>.
+    </p>
+
+    <section>
+      <h2>Parts and Libraries</h2>
+      <ul>
+        <li><strong><code>CapacitiveSensor.h</code>:</strong> reads the touch pad.</li>
+        <li><strong>Input:</strong> a touch sensor made from aluminum foil and a 1&nbsp;M&Omega; resistor (same as A4).</li>
+        <li><strong>Output (high load):</strong> a 12&nbsp;V LED strip.</li>
+        <li><strong>Transistor:</strong> an IRLZ44N N-MOSFET, used as a low-side switch.</li>
+        <li><strong>External power supply:</strong> a 12&nbsp;V, 2&nbsp;A wall adapter with a DC barrel jack.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Schematic</h2>
+      <figure>
+        <img src="a5-images/schematic.png" />
+        <figcaption>
+          The circuit uses 2 power sources. The arduino runs on USB 5&nbsp;V, used for logic, and the LED strip runs
+          on the 12&nbsp;V adapter (load). The 12&nbsp;V positive goes to the LED positive and the LED's negative
+          goes to the MOSFET drain. The source goes to ground. The adapter ground and the Arduino ground are
+          connected so the gate voltage is measured from the same ground. Pin ~5 is wired to the gate. The touch
+          sensor is wired the same way as in A4. Pin 4 goes through a 1&nbsp;M&Omega; resistor to the touch pad
+          which is also connected to pin 2 as the receive pin.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Component Value Calculations</h2>
+
+      <h3>The MOSFET and its maximum current</h3>
+      <p>
+        A 5V gate from the Arduino is enough to fully turn on the MOSFET. According to the datasheet it has a max
+        drain current of 47&nbsp;A.
+      </p>
+      <p>
+        I used a 1 branch LED strip so it draws 12&nbsp;mA at full brightness. Since all of the current goes
+        through the MOSFET drain to source the MOSFET carries 12&nbsp;mA.
+      </p>
+      <pre class="math">Current through the MOSFET:  I = 1 branch &times; 12 mA = 12 mA = 0.012 A
+MOSFET max I_D:              47 A
+Margin:                      47 A / 0.012 A &asymp; 3,900&times; under the limit
+
+Worst case: the adapter can only supply 2 A, so even a short could only push 2 A,
+which is still 23&times; under the 47 A limit.
+
+Heat in the MOSFET (R_DS(on) = 0.025 &Omega; at V_GS = 5 V):
+P = I&sup2; &times; R = (0.012 A)&sup2; &times; 0.025 &Omega; &asymp; 0.0000036 W  &rarr;  no heat, no heatsink needed</pre>
+
+      <h3>Why there is no resistor on the LED strip</h3>
+      <p>
+        The strip already has its own resistor built in. Each branch is a few LEDs in series with a small resistor
+        printed on the strip, made for 12&nbsp;V. That resistor is what sets the 12&nbsp;mA, so I don't need to
+        add one.
+      </p>
+
+
+      <h3>The 1&nbsp;M&Omega; touch sensor resistor</h3>
+      <p>
+        The touch sensor works the same way as in A4. The library sets the send pin (4) high and times how long the
+        receive pin (2) takes to go high too. The foil pad acts like a capacitor. When I touch it, my body adds more
+        capacitance, so the pin takes longer to charge. The time depends on the resistor and the capacitance:
+      </p>
+      <pre class="math">&tau; = R &times; C
+
+No touch (pad &asymp; 10 pF):     1 M&Omega; &times; 10 pF  = 10 &micro;s
+Touching (hand &asymp; 100 pF):  1 M&Omega; &times; 100 pF = 100 &micro;s</pre>
+      <p>
+        A touch takes about 10 times longer to charge, so the reading is much bigger. In my Serial Monitor output
+        the untouched reading stayed around 20&ndash;46, and a touch jumped to about 10,600. I picked
+        1&nbsp;M&Omega; because the library suggests it for direct touch. A bigger resistor would detect my hand
+        from further away, but it would also be slower and pick up more noise. The current through it is tiny:
+      </p>
+      <pre class="math">I = V / R = 5 V / 1 M&Omega; = 0.005 mA  (max, only while the pad is charging)</pre>
+
+      <h3>Expected voltages and currents at key points</h3>
+      <ul>
+        <li><strong>Gate (pin 5):</strong> 5&nbsp;V when on, 0&nbsp;V when off. PWM switches between them, so the average is 5&nbsp;V &times; duty / 255.</li>
+        <li><strong>Drain:</strong> about 12&nbsp;V when off (no current, so no voltage drops across the strip). About 0.012&nbsp;A &times; 0.025&nbsp;&Omega; &asymp; 0.0003&nbsp;V (basically 0&nbsp;V) when on.</li>
+        <li><strong>Across the LED strip:</strong> about 12&nbsp;V and 12&nbsp;mA when on, 0&nbsp;V and 0&nbsp;mA when off.</li>
+        <li><strong>Source / ground:</strong> 0&nbsp;V (shared with the Arduino ground).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Circuit</h2>
+      <figure>
+        <img src="a5-images/circuit-overview.jpeg" />
+        <figcaption>
+          The whole circuit. The Arduino (top left) runs on USB. The breadboard in the middle holds the MOSFET
+          and the 1&nbsp;M&Omega; resistor. The foil touch pad is on the bottom left, and the LED strip and the
+          12&nbsp;V DC jack adapter are on the right.
+        </figcaption>
+      </figure>
+      <div class="photo-grid">
+        <figure>
+          <img src="a5-images/circuit-arduino.jpeg" />
+          <figcaption>
+            The Arduino wires. Yellow goes from pin ~5 to the MOSFET gate. Orange (pin 4, send) and blue (pin 2,
+            receive) go to the two ends of the 1&nbsp;M&Omega; resistor. Black goes from GND to the shared ground
+            rail.
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="a5-images/circuit-breadboard.jpeg" />
+          <figcaption>
+            The breadboard. The MOSFET is near the top, with the yellow gate wire on its left pin, the red wire to
+            the LED strip on its middle pin (drain), and a black jumper from its right pin (source) to the ground
+            rail. The 1&nbsp;M&Omega; resistor is in row 30, and the green wire goes from the receive end to the foil
+            pad.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="photo-grid">
+        <figure>
+          <img src="a5-images/circuit-touch-pad.jpeg" />
+          <figcaption>
+            The touch pad: folded aluminum foil held by a green alligator clip, connected to the green wire from the
+            receive side of the 1&nbsp;M&Omega; resistor.
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="a5-images/circuit-led-strip.jpeg" />
+          <figcaption>
+            The load side. The DC jack adapter turns the wall adapter's barrel plug into two screw terminals. The
+            white wire brings +12&nbsp;V to the strip's + pad, and the black wire connects the adapter's ground to
+            the breadboard's ground rail, which is shared with the Arduino. The red wire connects the strip's
+            &minus; pad to the MOSFET's drain.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>Firmware</h2>
+<pre class="code"><code>// Library for reading the capacitive touch sensor
+#include &lt;CapacitiveSensor.h&gt;
+
+// Send pin for the touch pad
+const int SEND_PIN = 4;
+// Receive pin for the touch pad
+const int RECEIVE_PIN = 2;
+// PWM pin wired to the MOSFET
+const int GATE_PIN = 5;
+
+// Number of samples the library adds together for each reading
+const int SAMPLES = 10;
+// Number of readings averaged at startup to find the base value
+const int CALIBRATION_READS = 50;
+// Changes smaller than this don't register to reduce noise
+const long NOISE_THRESHOLD = 30;
+// How far above the baseline a full-hand touch reads (I measured this in A4)
+const long TOUCH_RANGE = 1000;
+// Highest analogWrite() value: 255 = gate HIGH 100% of the time = full brightness
+const int MAX_BRIGHTNESS = 255;
+// Milliseconds to wait between readings (smoothing)
+const int LOOP_DELAY = 10;
+
+// Set up the capacitive sensor
+CapacitiveSensor touchSensor = CapacitiveSensor(SEND_PIN, RECEIVE_PIN);
+
+// Untouched sensor reading
+long baseline = 0;
+// Smoothed touch strength (0 = no touch, TOUCH_RANGE = full hand)
+long smoothedTouch = 0;
+
+void setup() {
+  // Set the gate pin as an OUTPUT
+  // As an OUTPUT it starts LOW (0 V), so the MOSFET is off and the strip is dark.
+  pinMode(GATE_PIN, OUTPUT);
+  // Make sure the LED starts at 0 V
+  analogWrite(GATE_PIN, 0);
+  // Start the Serial Monitor at 115200 baud
+  Serial.begin(115200);
+  // Turn off the library's auto-calibration because this sketch calibrates itself
+  touchSensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
+
+  // Tell the user not to touch the pad
+  Serial.println("Calibrating... don't touch the pad");
+  // Running total of the calibration readings
+  long total = 0;
+  // Take several readings with no touch
+  for (int i = 0; i &lt; CALIBRATION_READS; i++) {
+    // Add one 10-sample reading to the total
+    total += touchSensor.capacitiveSensor(SAMPLES);
+    // Short pause between readings
+    delay(10);
+  }
+  // The average untouched reading becomes the baseline
+  baseline = total / CALIBRATION_READS;
+  // Print the baseline label
+  Serial.print("Baseline: ");
+  // Print the baseline value
+  Serial.println(baseline);
+}
+
+void loop() {
+  // Get the sensor value with 10 samples
+  long raw = touchSensor.capacitiveSensor(SAMPLES);
+  // Subtract the baseline 
+  long touch = raw - baseline;
+  // If the change is too small to be a real touch
+  if (touch &lt; NOISE_THRESHOLD) {
+    // Treat it as no touch
+    touch = 0;
+  }
+  // Keep the touch value between 0 and a full touch
+  touch = constrain(touch, 0, TOUCH_RANGE);
+  // Smooth out noise and fade gently: 7 parts old value, 1 part new value
+  smoothedTouch = (smoothedTouch * 7 + touch) / 8;
+
+  // Turn touch strength (0 to 1000) into a PWM value (0 to 255)
+  int brightness = map(smoothedTouch, 0, TOUCH_RANGE, 0, MAX_BRIGHTNESS);
+  // Send PWM to the MOSFET
+  analogWrite(GATE_PIN, brightness);
+
+  // Print the raw value label
+  Serial.print("raw: ");
+  // Print the raw sensor value
+  Serial.print(raw);
+  // Print the touch label
+  Serial.print(" | touch: ");
+  // Print the smoothed touch value
+  Serial.print(smoothedTouch);
+  // Print the PWM label
+  Serial.print(" | pwm: ");
+  // Print the analogWrite() value
+  Serial.print(brightness);
+  // Print the gate voltage label
+  Serial.print(" | avg gate V: ");
+  // Print the average gate voltage (5 V times the fraction of time the pin is HIGH)
+  Serial.println(5.0 * brightness / 255.0);
+
+  // Wait a little before the next reading
+  delay(LOOP_DELAY);
+}</code></pre>
+
+      <h3>Why I chose these values</h3>
+      <ul>
+        <li><code>GATE_PIN = 5</code>: a PWM (~) pin, so <code>analogWrite()</code> works on it.</li>
+        <li><code>SEND_PIN = 4</code> and <code>RECEIVE_PIN = 2</code>: same touch sensor wiring as A4.</li>
+        <li><code>SAMPLES</code>, <code>CALIBRATION_READS</code>, <code>NOISE_THRESHOLD</code>: the same values that worked for the foil pad in A4. Untouched readings stayed between 20 and 46, so a threshold of 30 above the baseline (20 + 30 = 50) never triggered by accident.</li>
+        <li><code>TOUCH_RANGE = 1000</code>: kept from A4. With this setup a touch reads about 10,600, so any touch is above 1000 and counts as a full touch. That makes the pad work like a button: touching fades the strip up and letting go fades it out.</li>
+        <li><code>MAX_BRIGHTNESS = 255</code>: the largest <code>analogWrite()</code> value. 255 keeps the gate at 5&nbsp;V all the time, so the strip is fully on.</li>
+        <li><code>(smoothedTouch * 7 + touch) / 8</code>: slower smoothing than A4 (3:1), so the strip fades in and out instead of flickering.</li>
+        <li><code>LOOP_DELAY = 10</code>: a short pause between readings so the fade is smooth and visible instead of instant. I noticed this being an issue during the in class activity.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Circuit Operation</h2>
+      <figure>
+        <img class="gif" src="a5-images/circuit-operation.gif" />
+        <figcaption>
+          When I touch the foil the LED strip fades up, and when I let go it fades back out. The strip runs on the
+          12&nbsp;V adapter, and the Arduino only switches it through the MOSFET.
+        </figcaption>
+      </figure>
+
+      <h3>Serial Monitor output</h3>
+      <p>
+        Part of the Serial Monitor output for one touch (ellipses = skipped lines). Each line shows the raw sensor
+        reading, the smoothed touch value, the <code>analogWrite()</code> value, and the average gate voltage.
+      </p>
+<pre class="code"><code>Calibrating... don't touch the pad
+Baseline: 20
+raw: 28 | touch: 0 | pwm: 0 | avg gate V: 0.00
+raw: 37 | touch: 0 | pwm: 0 | avg gate V: 0.00
+raw: 27 | touch: 0 | pwm: 0 | avg gate V: 0.00
+...
+raw: 42 | touch: 0 | pwm: 0 | avg gate V: 0.00
+raw: 41 | touch: 0 | pwm: 0 | avg gate V: 0.00
+raw: 12646 | touch: 125 | pwm: 31 | avg gate V: 0.61
+raw: 10628 | touch: 234 | pwm: 59 | avg gate V: 1.16
+raw: 10651 | touch: 329 | pwm: 83 | avg gate V: 1.63
+raw: 10647 | touch: 412 | pwm: 105 | avg gate V: 2.06
+raw: 10606 | touch: 485 | pwm: 123 | avg gate V: 2.41
+raw: 10631 | touch: 549 | pwm: 139 | avg gate V: 2.73
+...
+raw: 10650 | touch: 918 | pwm: 234 | avg gate V: 4.59
+raw: 10683 | touch: 928 | pwm: 236 | avg gate V: 4.63
+raw: 7511 | touch: 937 | pwm: 238 | avg gate V: 4.67
+raw: 51 | touch: 823 | pwm: 209 | avg gate V: 4.10
+raw: 36 | touch: 720 | pwm: 183 | avg gate V: 3.59
+raw: 41 | touch: 630 | pwm: 160 | avg gate V: 3.14
+raw: 41 | touch: 551 | pwm: 140 | avg gate V: 2.75
+...
+raw: 34 | touch: 8 | pwm: 2 | avg gate V: 0.04
+raw: 34 | touch: 7 | pwm: 1 | avg gate V: 0.02
+raw: 35 | touch: 3 | pwm: 0 | avg gate V: 0.00
+raw: 31 | touch: 0 | pwm: 0 | avg gate V: 0.00</code></pre>
+      <p>
+        With no touch the raw reading stays around 20&ndash;46, which is under the noise threshold, so the strip
+        stays off. When I touch the pad the raw reading jumps to about 10,600. The smoothing makes the touch value
+        climb 1/8 of the way to 1000 on each reading, so the PWM value and the average gate voltage rise step by
+        step (31, 59, 83...) and the strip fades up. I let go before it reached 255, at pwm 238 (4.67&nbsp;V
+        average). When I let go, the raw reading drops back to about 40 and the touch value shrinks by 1/8 each
+        reading, so the strip fades back out to 0.
+      </p>
+    </section>
+
+    <section>
+      <h2>Questions</h2>
+
+      <h3>1. What is the absolute maximum current between pins 2 and 3 of my MOSFET?</h3>
+      <p>
+        My MOSFET says IRLZ44N on it. Pin 2 is the drain and pin 3 is the source. According to the
+        <a href="https://www.infineon.com/assets/row/public/documents/24/49/infineon-irlz44n-datasheet-en.pdf">datasheet</a>,
+        the absolute maximum continuous drain current is <strong>47&nbsp;A</strong> (V<sub>GS</sub> = 10&nbsp;V,
+        case at 25&nbsp;&deg;C).
+      </p>
+
+      <h3>2. Schematic: Arduino, DC motor, and flyback diode</h3>
+      <figure>
+        <img src="a5-images/q2-schematic.png" />
+        <figcaption>
+          Similar to my LED strip circuit but with a 3-6&nbsp;V DC motor as the load. Pin ~5 drives the MOSFET gate
+          with the PWM controlling motor speed. The motor's positive goes to +6&nbsp;V from a 4 AA battery pack and
+          then it goes to drain. The fly back diode is across the motor. The cathode is on +6&nbsp;V and its anode
+          is on the drain. The battery pack and Arduino ground are connected. I used a 6&nbsp;V battery pack
+          instead of the 12&nbsp;V power adapter used in my LED circuit because the max voltage for the motor is
+          6&nbsp;V.
+        </figcaption>
+      </figure>
+      <pre class="math">Motor current at 6 V:   0.16 A running (no load), 1.5 A stalled
+1N4007 max average current:   1 A     &rarr; OK while running; the diode only carries current
+                                        for a moment after each switch-off
+1N4007 max surge current:     30 A    &rarr; OK, even the 1.5 A stall current is far below this
+1N4007 max reverse voltage:   1000 V  &rarr; OK, it only ever sees 6 V
+MOSFET max drain current:     47 A    &rarr; OK, about 30&times; headroom even at stall</pre>
+      <p>Parts with datasheets I could use:</p>
+      <ul>
+        <li><strong>Arduino:</strong> Arduino Uno Rev3 (<a href="https://docs.arduino.cc/resources/datasheets/A000066-datasheet.pdf">datasheet</a>)</li>
+        <li><strong>DC motor:</strong> Adafruit #3777, DC Gearbox "TT" Motor, 3&ndash;6&nbsp;V (<a href="https://www.adafruit.com/product/3777">product page with specs</a>)</li>
+        <li><strong>Flyback diode:</strong> 1N4007 (<a href="https://www.onsemi.com/pdf/datasheet/1n4001-d.pdf">datasheet</a>, covers 1N4001&ndash;1N4007)</li>
+        <li><strong>MOSFET:</strong> IRLZ44N (<a href="https://www.infineon.com/assets/row/public/documents/24/49/infineon-irlz44n-datasheet-en.pdf">datasheet</a>)</li>
+        <li><strong>Power supply:</strong> a 4&nbsp;&times;&nbsp;AA battery pack (4 &times; 1.5&nbsp;V = 6&nbsp;V).</li>
+      </ul>
+
+      <h3>3. Schematic and pseudocode: Arduino, L293D, and two motors</h3>
+      <figure>
+        <img src="a5-images/q3-l293d-schematic.png" />
+        <figcaption>
+          The L293D can drive 2 motors. Motor A is on outputs 1Y and 2Y and motor B is on outputs 3Y and 4Y. Each
+          motor has a PWM enable pin that sets speed (~9 for A &amp; ~10 for B) and two direction pins (8 &amp; 7
+          for A, 4 &amp; 2 for B). The Arduino 5&nbsp;V powers both VCC1 and VCC2. All four GNDs are connected to
+          the Arduino GND. The chip has a flyback diode built in so it isn't needed.
+        </figcaption>
+      </figure>
+      <h3>Pseudocode</h3>
+<pre class="code"><code>// Pins for Motor A
+ENA = 9    // PWM speed
+IN1 = 8    // direction
+IN2 = 7    // direction
+// Pins for Motor B
+ENB = 10   // PWM speed
+IN3 = 4    // direction
+IN4 = 2    // direction
+
+setup:
+    set ENA, IN1, IN2, ENB, IN3, IN4 as OUTPUT   // all start LOW, so both motors are off
+
+// forward = first input HIGH, second LOW; backward = the opposite
+motorA(direction):
+    if direction == FORWARD:  IN1 = HIGH, IN2 = LOW
+    if direction == BACKWARD: IN1 = LOW,  IN2 = HIGH
+    analogWrite(ENA, 200)    // about 80% speed
+
+motorB(direction):
+    if direction == FORWARD:  IN3 = HIGH, IN4 = LOW
+    if direction == BACKWARD: IN3 = LOW,  IN4 = HIGH
+    analogWrite(ENB, 200)    // about 80% speed
+
+stopBoth():
+    analogWrite(ENA, 0)
+    analogWrite(ENB, 0)
+
+loop:
+    // 1. both forward
+    motorA(FORWARD);  motorB(FORWARD);  wait 2 s;  stopBoth();  wait 0.5 s
+    // 2. both backward
+    motorA(BACKWARD); motorB(BACKWARD); wait 2 s;  stopBoth();  wait 0.5 s
+    // 3. A forward, B backward (spins in place one way)
+    motorA(FORWARD);  motorB(BACKWARD); wait 2 s;  stopBoth();  wait 0.5 s
+    // 4. A backward, B forward (spins in place the other way)
+    motorA(BACKWARD); motorB(FORWARD);  wait 2 s;  stopBoth();  wait 0.5 s</code></pre>
+      <p>
+        The short stop between each step lets the motors slow down before they change direction, so they don't
+        pull a big current spike by reversing at full speed.
+      </p>
+
+      <h3>4. Did you use AI tools?</h3>
+      <p>I used a Claude chatbot for the following:</p>
+      <ul>
+        <li>
+          Verifying why my circuit wasn't working. I uploaded an image of the circuit and it was able to identify
+          that I had my LED strip wired in the wrong direction.
+        </li>
+        <li>
+          Formatting my code for html output. I uploaded my content (images &amp; schematics) to it and asked it to
+          create an outline for the HTML. And then I added my answers for each question.
+        </li>
+      </ul>
+    </section>
+  </body>
+</html>
